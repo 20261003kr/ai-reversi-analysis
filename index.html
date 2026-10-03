@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>リバーシ AI対戦・分析</title>
+<style>
+*{box-sizing:border-box}body{font-family:sans-serif;margin:30px;background:#f5f5f5;color:#222}h1{margin-top:0}button,select{font-size:16px;padding:8px 12px}button{cursor:pointer}.screen{display:none}.screen.active{display:block}
+#settingsCard{max-width:720px;background:#fff;border:1px solid #bbb;border-radius:10px;padding:24px}.setting-row{margin-bottom:22px}.setting-row>label,.tuning-item label{display:block;font-weight:bold;margin-bottom:7px}.setting-row select{min-width:220px}.setting-help,.description{color:#666;font-size:14px;line-height:1.6}.description{font-size:13px;margin-top:4px}#tuningSettings{display:none;margin-top:24px;padding-top:20px;border-top:1px solid #ddd}.tuning-item{margin-bottom:20px}.tuning-item input[type=range]{width:360px;max-width:90%}.value{display:inline-block;width:75px;text-align:right}.formula{margin-top:14px;padding:12px;background:#eef5ff;border-left:4px solid #5078b8;line-height:1.7}#startButton{margin-top:10px;font-size:18px;font-weight:bold;padding:12px 30px}
+#gameTop{margin-bottom:16px}#gameSettingsSummary{margin-bottom:12px;color:#555;font-size:14px}#turn{font-size:20px;font-weight:bold;margin-bottom:5px}#score{font-size:17px;margin-bottom:15px}#main{display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start}#leftColumn{width:460px}#sideColumn{width:650px}
+#boardFrame{display:grid;grid-template-columns:30px 400px 30px;grid-template-rows:30px 400px 30px}#topLabels{grid-column:2;grid-row:1}#bottomLabels{grid-column:2;grid-row:3}#leftLabels{grid-column:1;grid-row:2}#rightLabels{grid-column:3;grid-row:2}.column-labels{display:grid;grid-template-columns:repeat(8,50px)}.row-labels{display:grid;grid-template-rows:repeat(8,50px)}.coordinate{display:flex;justify-content:center;align-items:center;font-weight:bold}#board{grid-column:2;grid-row:2;display:grid;grid-template-columns:repeat(8,50px);width:400px;height:400px;box-shadow:0 0 0 2px #000}.cell{width:50px;height:50px;background:#16833b;border:1px solid #0b4f24;position:relative}.valid-move{outline:3px solid red;outline-offset:-3px;cursor:pointer}.review-move{box-shadow:inset 0 0 0 4px #ffd400}.piece{width:40px;height:40px;border-radius:50%;position:absolute;top:4px;left:4px}.black{background:#000}.white{background:#fff;border:1px solid #aaa}
+.panel{background:#fff;border:1px solid #aaa;border-radius:8px;padding:18px;margin-bottom:20px}.panel h2{margin-top:0}#analysisPanel,#fixedSettingsPanel{display:none}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #bbb;padding:7px;text-align:center}th{background:#eee}.chosen{background:#fff3b0;font-weight:bold}.recommended{background:#e8f6e8}.actual-recommended{background:#dfefff;font-weight:bold}.note{margin-top:15px;padding:10px;background:#f2f2f2;line-height:1.7}.glossary{font-size:14px;line-height:1.7}.glossary dt{font-weight:bold;margin-top:10px}.glossary dd{margin-left:15px}
+#reviewPanel{display:none;margin-top:25px;background:#fff;border:1px solid #aaa;border-radius:8px;padding:15px}#reviewPanel h2{margin-top:0}#reviewCounter{font-weight:bold;margin-bottom:8px}#reviewInfo{line-height:1.7;margin-bottom:12px}#reviewButtons,#postGameButtons{display:flex;flex-wrap:wrap;gap:6px}#postGameButtons{margin-top:14px}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+footer{margin-top:300px;color:#666;font-size:14px}
+@media(max-width:760px){body{margin:12px}#leftColumn,#sideColumn{width:100%}#main{display:block}#boardFrame{transform:scale(.82);transform-origin:top left;margin-bottom:-75px}}
+</style>
+</head>
+<body>
+<section id="settingsScreen" class="screen active">
+<h1>リバーシ AI対戦・分析</h1>
+<div id="settingsCard">
+<h2>対局設定</h2>
+<div class="setting-row"><label for="playerOrder">あなたの手番</label><select id="playerOrder"><option value="first" selected>先手（黒）</option><option value="second">後手（白）</option></select><div class="setting-help">黒が先手です。後手を選ぶと、対局開始後にAIが自動で初手を打ちます。</div></div>
+<div class="setting-row"><label for="difficulty">AIの強さ</label><select id="difficulty"><option value="easy">弱い</option><option value="normal" selected>普通</option><option value="hard">強い</option></select></div>
+<div class="setting-row"><label for="displayMode">表示モード</label><select id="displayMode"><option value="normal">通常モード</option><option value="analysis" selected>分析モード</option><option value="tuning">AI調整モード</option></select><div class="setting-help">分析モードではAIの候補手と評価値を表示します。AI調整モードでは評価関数の重みも設定できます。</div></div>
+<div id="tuningSettings">
+<h3>AI調整</h3>
+<div class="tuning-item"><label>角の価値 <span id="cornerValueText" class="value"></span></label><input id="cornerValue" type="range" min="0" max="300" step="10" value="100"><div class="description">高くすると、AIは角をより強く重視します。</div></div>
+<div class="tuning-item"><label>角の隣の評価 <span id="cornerNeighborText" class="value"></span></label><input id="cornerNeighbor" type="range" min="-100" max="20" step="5" value="-30"><div class="description">強くマイナスにすると、AIは角の隣を強く避けます。</div></div>
+<div class="tuning-item"><label>辺の価値 <span id="edgeValueText" class="value"></span></label><input id="edgeValue" type="range" min="-10" max="50" step="5" value="10"><div class="description">高くすると、AIは辺を好むようになります。</div></div>
+<div class="tuning-item"><label>石数の重み <span id="pieceWeightText" class="value"></span></label><input id="pieceWeight" type="range" min="0" max="20" step="1" value="2"><div class="description">高くすると、AIは現在の石数をより重視します。</div></div>
+<div class="tuning-item"><label>合法手数の重み <span id="mobilityWeightText" class="value"></span></label><input id="mobilityWeight" type="range" min="0" max="30" step="1" value="5"><div class="description">高くすると、AIは自分の選択肢を増やし、あなたの選択肢を減らすことをより重視します。</div></div>
+<div class="tuning-item"><label>強いAIの先読み深度 <span id="depthText" class="value"></span></label><input id="searchDepth" type="range" min="1" max="5" step="1" value="3"><div class="description">大きいほど先まで読みます。4～5では計算が重くなる場合があります。</div></div>
+<button type="button" onclick="resetTuning()">標準設定に戻す</button>
+<div id="currentFormula" class="formula"></div>
+</div>
+<button id="startButton" type="button" onclick="startGame()">対局開始</button>
+</div>
+</section>
+
+<section id="gameScreen" class="screen">
+<h1>リバーシ AI対戦・分析</h1>
+<div id="gameTop"><div id="gameSettingsSummary"></div><button type="button" onclick="returnToSettingsFromGame()">設定画面に戻る</button></div>
+<div id="turn"></div><div id="score"></div>
+<div id="main">
+<div id="leftColumn">
+<div id="boardFrame"><div id="topLabels" class="column-labels"></div><div id="bottomLabels" class="column-labels"></div><div id="leftLabels" class="row-labels"></div><div id="rightLabels" class="row-labels"></div><div id="board"></div></div>
+<div id="reviewPanel"><h2>感想戦</h2><div id="reviewCounter"></div><div id="reviewInfo"></div><div id="reviewButtons"><button id="firstMoveButton" onclick="reviewFirst()">｜◀ 最初</button><button id="previousMoveButton" onclick="reviewPrevious()">◀ 前の手</button><button id="nextMoveButton" onclick="reviewNext()">次の手 ▶</button><button id="lastMoveButton" onclick="reviewLast()">最後 ▶｜</button></div><div id="postGameButtons"><button onclick="restartSameSettings()">同じ設定でもう一局</button><button onclick="returnToSettingsAfterGame()">設定を変更する</button></div></div>
+</div>
+<div id="sideColumn">
+<div id="analysisPanel" class="panel"><h2>AI思考分析</h2><div id="analysisContent">AIが手を打つと、ここに分析結果が表示されます。</div><h3>用語解説</h3><div id="evaluationDirection" class="formula"></div><dl class="glossary"><dt>手</dt><dd>選択可能だった候補手です。D3ならD列・3行目を意味します。</dd><dt>位置評価</dt><dd>石が盤面上のどこにあるかを評価します。角は高評価、角の隣など危険な場所はマイナスになります。</dd><dt>石数評価</dt><dd>「AIの石数－あなたの石数」に設定した重みを掛けた値です。</dd><dt>合法手評価</dt><dd>AIが次に置ける場所と、あなたが次に置ける場所の数の差を評価します。</dd><dt>即時評価</dt><dd>その候補手を打った直後の盤面の評価です。</dd><dt>★採用</dt><dd>AIが実際に選択した手です。</dd><dt>★実際</dt><dd>感想戦で、あなたが実際に打った手を示します。</dd><dt>◎推奨</dt><dd>感想戦で、AIの評価関数上、あなたに最も有利だった候補手を示します。</dd></dl></div>
+<div id="fixedSettingsPanel" class="panel"><h2>この対局のAI設定</h2><div id="fixedSettingsContent"></div></div>
+</div>
+</div>
+</section>
+<footer>製作者：かわばた</footer>
+
+<script>
+const EMPTY=0,BLACK=1,WHITE=2;
+const directions=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+let HUMAN=BLACK,AI=WHITE,currentPlayer=BLACK,gameBoard=createInitialBoard(),gameStarted=false,gameOver=false,reviewMode=false,reviewIndex=0,history=[],aiTimer=null,gameConfig=null;
+const $=id=>document.getElementById(id);
+const settingsScreen=$("settingsScreen"),gameScreen=$("gameScreen"),boardElement=$("board"),turnElement=$("turn"),scoreElement=$("score"),analysisPanel=$("analysisPanel"),analysisContent=$("analysisContent"),fixedSettingsPanel=$("fixedSettingsPanel"),fixedSettingsContent=$("fixedSettingsContent"),reviewPanel=$("reviewPanel");
+
+$("displayMode").addEventListener("change",updateSettingsScreenMode);
+for(const id of ["cornerValue","cornerNeighbor","edgeValue","pieceWeight","mobilityWeight","searchDepth"]) $(id).addEventListener("input",updateTuningDisplay);
+
+function getTuningSettingsFromUi(){return{corner:+$("cornerValue").value,cornerNeighbor:+$("cornerNeighbor").value,edge:+$("edgeValue").value,pieceWeight:+$("pieceWeight").value,mobilityWeight:+$("mobilityWeight").value,depth:+$("searchDepth").value}}
+function getStandardSettings(){return{corner:100,cornerNeighbor:-30,edge:10,pieceWeight:2,mobilityWeight:5,depth:3}}
+function updateSettingsScreenMode(){$("tuningSettings").style.display=$("displayMode").value==="tuning"?"block":"none"}
+function updateTuningDisplay(){const s=getTuningSettingsFromUi();$("cornerValueText").textContent=s.corner;$("cornerNeighborText").textContent=s.cornerNeighbor;$("edgeValueText").textContent=s.edge;$("pieceWeightText").textContent="×"+s.pieceWeight;$("mobilityWeightText").textContent="×"+s.mobilityWeight;$("depthText").textContent=s.depth+"手";$("currentFormula").innerHTML=`<strong>現在の評価式</strong><br>盤面評価 ＝ 位置評価 ＋（AIの石数－あなたの石数）× ${s.pieceWeight} ＋（AI合法手数－あなたの合法手数）× ${s.mobilityWeight}<br><br>角：${s.corner}点　角の隣：${s.cornerNeighbor}点　辺：${s.edge}点`}
+function resetTuning(){const s=getStandardSettings();$("cornerValue").value=s.corner;$("cornerNeighbor").value=s.cornerNeighbor;$("edgeValue").value=s.edge;$("pieceWeight").value=s.pieceWeight;$("mobilityWeight").value=s.mobilityWeight;$("searchDepth").value=s.depth;updateTuningDisplay()}
+
+function startGame(){const playerOrder=$("playerOrder").value,difficulty=$("difficulty").value,displayMode=$("displayMode").value;HUMAN=playerOrder==="first"?BLACK:WHITE;AI=otherPlayer(HUMAN);gameConfig={playerOrder,difficulty,displayMode,settings:displayMode==="tuning"?{...getTuningSettingsFromUi()}:{...getStandardSettings()}};settingsScreen.classList.remove("active");gameScreen.classList.add("active");startNewMatch()}
+function restartSameSettings(){startNewMatch()}
+function startNewMatch(){if(aiTimer!==null){clearTimeout(aiTimer);aiTimer=null}gameBoard=createInitialBoard();currentPlayer=BLACK;gameStarted=true;gameOver=false;reviewMode=false;reviewIndex=0;reviewPanel.style.display="none";analysisContent.innerHTML="AIが手を打つと、ここに分析結果が表示されます。";initializeHistory();updateGameUiForConfig();drawBoard();if(currentPlayer===AI)scheduleAi()}
+function updateGameUiForConfig(){const hc=colorName(HUMAN),ac=colorName(AI),order=HUMAN===BLACK?"先手":"後手";$("gameSettingsSummary").textContent=`あなた：${order}（${hc}）　／　AI：${ac}　／　AIの強さ：${difficultyName(gameConfig.difficulty)}　／　表示：${modeName(gameConfig.displayMode)}`;$("evaluationDirection").innerHTML=`＋の値ほど <strong>AI（${ac}）に有利</strong><br>－の値ほど <strong>あなた（${hc}）に有利</strong>`;analysisPanel.style.display=gameConfig.displayMode==="normal"?"none":"block";fixedSettingsPanel.style.display=gameConfig.displayMode==="tuning"?"block":"none";if(gameConfig.displayMode==="tuning")showFixedSettings()}
+function showFixedSettings(){const s=gameConfig.settings;fixedSettingsContent.innerHTML=`<strong>対局開始時に固定されています。</strong><br><br>角：${s.corner}点　角の隣：${s.cornerNeighbor}点　辺：${s.edge}点<br>石数の重み：×${s.pieceWeight}　合法手数の重み：×${s.mobilityWeight}<br>強いAIの先読み深度：${s.depth}手`}
+function returnToSettingsFromGame(){if(!gameOver&&!confirm("対局を終了して設定画面に戻りますか？"))return;returnToSettings()}
+function returnToSettingsAfterGame(){returnToSettings()}
+function returnToSettings(){if(aiTimer!==null){clearTimeout(aiTimer);aiTimer=null}gameStarted=false;gameOver=false;reviewMode=false;gameScreen.classList.remove("active");settingsScreen.classList.add("active")}
+
+function createInitialBoard(){const b=Array.from({length:8},()=>Array(8).fill(EMPTY));b[3][3]=WHITE;b[3][4]=BLACK;b[4][3]=BLACK;b[4][4]=WHITE;return b}
+function createCoordinates(){const letters="ABCDEFGH";for(let i=0;i<8;i++){for(const target of [$("topLabels"),$("bottomLabels")]){const d=document.createElement("div");d.className="coordinate";d.textContent=letters[i];target.appendChild(d)}for(const target of [$("leftLabels"),$("rightLabels")]){const d=document.createElement("div");d.className="coordinate";d.textContent=i+1;target.appendChild(d)}}}
+function initializeHistory(){history=[];const c=countPieces(gameBoard);history.push({board:copyBoard(gameBoard),player:null,row:null,col:null,name:null,black:c.black,white:c.white,analysis:null,evaluation:evaluateBoard(gameBoard,gameConfig.settings)});reviewIndex=0}
+function recordHistory(player,row,col,analysis){const c=countPieces(gameBoard);history.push({board:copyBoard(gameBoard),player,row,col,name:coordinateName(row,col),black:c.black,white:c.white,analysis,evaluation:evaluateBoard(gameBoard,gameConfig.settings)})}
+function getDisplayedBoard(){return reviewMode?history[reviewIndex].board:gameBoard}
+function drawBoard(){const board=getDisplayedBoard();boardElement.innerHTML="";for(let row=0;row<8;row++){for(let col=0;col<8;col++){const cell=document.createElement("div");cell.className="cell";if(!reviewMode&&!gameOver&&currentPlayer===HUMAN&&isValidMove(gameBoard,row,col,HUMAN))cell.classList.add("valid-move");if(reviewMode){const item=history[reviewIndex];if(item.row===row&&item.col===col)cell.classList.add("review-move")}cell.addEventListener("click",()=>humanMove(row,col));if(board[row][col]===BLACK){const p=document.createElement("div");p.className="piece black";cell.appendChild(p)}else if(board[row][col]===WHITE){const p=document.createElement("div");p.className="piece white";cell.appendChild(p)}boardElement.appendChild(cell)}}updateScore(board);if(reviewMode)updateReviewPanel();else if(!gameOver)turnElement.textContent=currentPlayer===HUMAN?`あなた（${colorName(HUMAN)}）の番です`:`AI（${colorName(AI)}）が考えています…`}
+
+function getPositionValue(row,col,s){if((row===0||row===7)&&(col===0||col===7))return s.corner;const near=[[0,1],[1,0],[1,1],[0,6],[1,6],[1,7],[6,0],[6,1],[7,1],[6,6],[6,7],[7,6]];if(near.some(([r,c])=>r===row&&c===col))return s.cornerNeighbor;if(row===0||row===7||col===0||col===7)return s.edge;return 1}
+function analyzeHumanMove(actualRow,actualCol){const settings={...gameConfig.settings},moves=getValidMoves(gameBoard,HUMAN),candidates=[];for(const move of moves){const b=copyBoard(gameBoard);applyMove(b,move.row,move.col,HUMAN);const d=evaluateBoardDetailed(b,settings);candidates.push({row:move.row,col:move.col,name:coordinateName(move.row,move.col),position:d.position,pieces:d.pieces,mobility:d.mobility,total:d.total})}const bestTotal=Math.min(...candidates.map(x=>x.total));return{type:"human",settings:{...settings},actualName:coordinateName(actualRow,actualCol),recommendedNames:candidates.filter(x=>x.total===bestTotal).map(x=>x.name),bestTotal,candidates}}
+function humanMove(row,col){if(!gameStarted||reviewMode||gameOver||currentPlayer!==HUMAN||!isValidMove(gameBoard,row,col,HUMAN))return;const snapshot=analyzeHumanMove(row,col);applyMove(gameBoard,row,col,HUMAN);recordHistory(HUMAN,row,col,snapshot);currentPlayer=AI;continueGame()}
+function aiMove(){aiTimer=null;if(!gameStarted||gameOver||currentPlayer!==AI)return;const difficulty=gameConfig.difficulty,analyses=analyzeAiMoves(difficulty);if(!analyses.length)return;let chosen;if(difficulty==="easy")chosen=analyses[Math.floor(Math.random()*analyses.length)];else if(difficulty==="normal")chosen=analyses.reduce((a,b)=>b.total>a.total?b:a);else chosen=analyses.reduce((a,b)=>b.minimaxScore>a.minimaxScore?b:a);const snapshot={type:"ai",difficulty,settings:{...gameConfig.settings},chosenName:chosen.name,candidates:analyses.map(x=>({...x}))};showAiAnalysis(snapshot,false);applyMove(gameBoard,chosen.row,chosen.col,AI);recordHistory(AI,chosen.row,chosen.col,snapshot);currentPlayer=HUMAN;continueGame()}
+function analyzeAiMoves(difficulty){const moves=getValidMoves(gameBoard,AI),results=[],settings={...gameConfig.settings};for(const move of moves){const b=copyBoard(gameBoard);applyMove(b,move.row,move.col,AI);const d=evaluateBoardDetailed(b,settings);let minimaxScore=null;if(difficulty==="hard")minimaxScore=minimax(b,settings.depth,HUMAN,-Infinity,Infinity,settings);results.push({row:move.row,col:move.col,name:coordinateName(move.row,move.col),position:d.position,pieces:d.pieces,mobility:d.mobility,total:d.total,minimaxScore})}return results}
+function evaluateBoardDetailed(board,s){let position=0;for(let r=0;r<8;r++)for(let c=0;c<8;c++){const v=getPositionValue(r,c,s);if(board[r][c]===AI)position+=v;if(board[r][c]===HUMAN)position-=v}const counts=countPieces(board),aiCount=AI===BLACK?counts.black:counts.white,humanCount=HUMAN===BLACK?counts.black:counts.white,pieces=(aiCount-humanCount)*s.pieceWeight,mobility=(getValidMoves(board,AI).length-getValidMoves(board,HUMAN).length)*s.mobilityWeight;return{position,pieces,mobility,total:position+pieces+mobility}}
+function evaluateBoard(board,s){return evaluateBoardDetailed(board,s).total}
+function minimax(board,depth,player,alpha,beta,s){const moves=getValidMoves(board,player),opponent=otherPlayer(player);if(moves.length===0){const otherMoves=getValidMoves(board,opponent);if(otherMoves.length===0){const c=countPieces(board),aiCount=AI===BLACK?c.black:c.white,humanCount=HUMAN===BLACK?c.black:c.white;return(aiCount-humanCount)*10000}}if(depth<=0)return evaluateBoard(board,s);if(moves.length===0)return minimax(board,depth-1,opponent,alpha,beta,s);if(player===AI){let best=-Infinity;for(const move of moves){const b=copyBoard(board);applyMove(b,move.row,move.col,AI);const score=minimax(b,depth-1,HUMAN,alpha,beta,s);best=Math.max(best,score);alpha=Math.max(alpha,score);if(beta<=alpha)break}return best}else{let best=Infinity;for(const move of moves){const b=copyBoard(board);applyMove(b,move.row,move.col,HUMAN);const score=minimax(b,depth-1,AI,alpha,beta,s);best=Math.min(best,score);beta=Math.min(beta,score);if(beta<=alpha)break}return best}}
+
+function showAiAnalysis(snapshot,isReview){if(!isReview&&gameConfig.displayMode==="normal")return;let html=isReview?"<p><strong>この手を打った時のAI思考分析</strong></p>":"<p><strong>今回のAIの候補手</strong></p>";html+="<table>"+(snapshot.difficulty==="hard"?"<tr><th>手</th><th>位置評価</th><th>石数評価</th><th>合法手評価</th><th>即時評価</th><th>先読み評価</th></tr>":"<tr><th>手</th><th>位置評価</th><th>石数評価</th><th>合法手評価</th><th>即時評価</th></tr>");for(const item of snapshot.candidates){const selected=item.name===snapshot.chosenName;html+=`<tr ${selected?'class="chosen"':''}><td>${selected?'★採用 ':''}${item.name}</td><td>${formatNumber(item.position)}</td><td>${formatNumber(item.pieces)}</td><td>${formatNumber(item.mobility)}</td><td>${formatNumber(item.total)}</td>${snapshot.difficulty==="hard"?`<td>${formatNumber(item.minimaxScore)}</td>`:""}</tr>`}html+="</table><div class='note'>";html+=`<strong>AIの強さ：</strong> ${difficultyName(snapshot.difficulty)}<br>`;html+=snapshot.difficulty==="easy"?"弱いAIは候補手からランダムに選択しました。":snapshot.difficulty==="normal"?"普通AIは即時評価が最も高い手を選択しました。":"強いAIは数手先まで読んだ評価を使って手を選択しました。";html+=`<br><br><strong>採用手：</strong> ${snapshot.chosenName}`;if(isReview){const s=snapshot.settings;html+=`<br><br><strong>この手を考えた当時のAI設定</strong><br>角：${s.corner}点　角の隣：${s.cornerNeighbor}点　辺：${s.edge}点<br>石数の重み：×${s.pieceWeight}　合法手数の重み：×${s.mobilityWeight}`;if(snapshot.difficulty==="hard")html+=`　先読み深度：${s.depth}手`}html+="</div>";analysisContent.innerHTML=html}
+function showHumanAnalysis(snapshot){let html=`<p><strong>あなた（${colorName(HUMAN)}）の着手分析</strong></p><div class="formula">この表はAIと同じ評価関数で候補手を採点しています。<br>＋ほどAI（${colorName(AI)}）に有利、－ほどあなた（${colorName(HUMAN)}）に有利です。<br>したがって、あなたの場合は<strong>即時評価が最も低い手</strong>を推奨手としています。</div><table><tr><th>手</th><th>位置評価</th><th>石数評価</th><th>合法手評価</th><th>即時評価</th></tr>`;for(const item of snapshot.candidates){const actual=item.name===snapshot.actualName,recommended=snapshot.recommendedNames.includes(item.name);let cls="",mark="";if(actual&&recommended)cls="actual-recommended";else if(actual)cls="chosen";else if(recommended)cls="recommended";if(actual)mark+="★実際 ";if(recommended)mark+="◎推奨 ";html+=`<tr class="${cls}"><td>${mark}${item.name}</td><td>${formatNumber(item.position)}</td><td>${formatNumber(item.pieces)}</td><td>${formatNumber(item.mobility)}</td><td>${formatNumber(item.total)}</td></tr>`}html+="</table>";const actual=snapshot.candidates.find(x=>x.name===snapshot.actualName),actualIsBest=actual.total===snapshot.bestTotal;html+=`<div class="note"><strong>あなたの実際の手：</strong> ${snapshot.actualName}<br><strong>評価関数上の推奨手：</strong> ${snapshot.recommendedNames.join("、")}`;if(actualIsBest)html+="<br><br>あなたの実際の手は、<strong>この評価関数上の推奨手でした。</strong>";else html+=`<br><br>実際の手の即時評価は ${formatNumber(actual.total)}、推奨手は ${formatNumber(snapshot.bestTotal)} でした。<br>この評価関数では、実際の手の方が ${actual.total-snapshot.bestTotal} 点ぶんAI側に有利な評価です。`;const s=snapshot.settings;html+=`<br><br><strong>この手を評価した当時のAI設定</strong><br>角：${s.corner}点　角の隣：${s.cornerNeighbor}点　辺：${s.edge}点<br>石数の重み：×${s.pieceWeight}　合法手数の重み：×${s.mobilityWeight}</div>`;analysisContent.innerHTML=html}
+
+function getValidMoves(board,player){const moves=[];for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(isValidMove(board,r,c,player))moves.push({row:r,col:c});return moves}
+function isValidMove(board,row,col,player){return getFlips(board,row,col,player).length>0}
+function getFlips(board,row,col,player){if(board[row][col]!==EMPTY)return[];const opponent=otherPlayer(player),all=[];for(const[dr,dc]of directions){let r=row+dr,c=col+dc;const flips=[];while(r>=0&&r<8&&c>=0&&c<8&&board[r][c]===opponent){flips.push([r,c]);r+=dr;c+=dc}if(flips.length&&r>=0&&r<8&&c>=0&&c<8&&board[r][c]===player)all.push(...flips)}return all}
+function applyMove(board,row,col,player){const flips=getFlips(board,row,col,player);if(!flips.length)return false;board[row][col]=player;for(const[r,c]of flips)board[r][c]=player;return true}
+function continueGame(){if(getValidMoves(gameBoard,currentPlayer).length){drawBoard();if(currentPlayer===AI)scheduleAi();return}const passed=currentPlayer;currentPlayer=otherPlayer(currentPlayer);if(getValidMoves(gameBoard,currentPlayer).length){alert((passed===HUMAN?`あなた（${colorName(HUMAN)}）`:`AI（${colorName(AI)}）`)+"は置ける場所がないためパスです。");drawBoard();if(currentPlayer===AI)scheduleAi();return}endGame()}
+function scheduleAi(){if(aiTimer!==null)clearTimeout(aiTimer);aiTimer=setTimeout(aiMove,300)}
+function countPieces(board){let black=0,white=0;for(const row of board)for(const cell of row){if(cell===BLACK)black++;if(cell===WHITE)white++}return{black,white}}
+function updateScore(board){const c=countPieces(board),humanCount=HUMAN===BLACK?c.black:c.white,aiCount=AI===BLACK?c.black:c.white;scoreElement.textContent=`あなた（${colorName(HUMAN)}）：${humanCount}　AI（${colorName(AI)}）：${aiCount}`}
+
+function getActualHumanCandidate(snapshot){
+    if(!snapshot||!snapshot.candidates)return null;
+    return snapshot.candidates.find(x=>x.name===snapshot.actualName)||null;
+}
+function getBestHumanCandidate(snapshot){
+    if(!snapshot||!snapshot.candidates||!snapshot.candidates.length)return null;
+    return snapshot.candidates.reduce((best,current)=>current.total<best.total?current:best);
+}
+function getCornerCount(board,player){
+    return [[0,0],[0,7],[7,0],[7,7]].reduce((sum,[r,c])=>sum+(board[r][c]===player?1:0),0);
+}
+
+
+function getMainAdviceTheme(humanRecords){
+    const totals={position:0,pieces:0,mobility:0};
+    for(const record of humanRecords){
+        const actual=getActualHumanCandidate(record.item.analysis),best=getBestHumanCandidate(record.item.analysis);
+        if(!actual||!best)continue;
+        totals.position+=Math.max(0,actual.position-best.position);
+        totals.pieces+=Math.max(0,actual.pieces-best.pieces);
+        totals.mobility+=Math.max(0,actual.mobility-best.mobility);
+    }
+    const entries=Object.entries(totals).sort((a,b)=>b[1]-a[1]);
+    return !entries.length||entries[0][1]===0?null:entries[0][0];
+}
+function adviceTextForTheme(theme){
+    if(theme==="position")return "位置評価の差が大きめでした。角そのものだけでなく、角の隣や辺に置くタイミングを意識すると、局面を安定させやすくなります。";
+    if(theme==="mobility")return "合法手評価の差が大きめでした。目先で多く石を取ることより、相手の置ける場所を減らし、自分の選択肢を残すことを意識すると改善しやすい対局でした。";
+    if(theme==="pieces")return "石数評価の差が大きめでした。この評価関数では、候補手による石数差が結果に強く表れた対局でした。";
+    return "大きな偏りは見られませんでした。感想戦で評価が大きく動いた局面を確認すると、次の対局で再現しやすいポイントが見つかります。";
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function endGame(){
+    gameOver=true;
+
+    if(aiTimer!==null){
+        clearTimeout(aiTimer);
+        aiTimer=null;
+    }
+
+    /*
+        対局終了時点の gameBoard を最終状態として
+        履歴末尾にも同期する。
+    */
+    const finalCounts=countPieces(gameBoard);
+
+    if(history.length){
+        const last=history[history.length-1];
+        last.board=copyBoard(gameBoard);
+        last.black=finalCounts.black;
+        last.white=finalCounts.white;
+        last.evaluation=evaluateBoard(gameBoard,gameConfig.settings);
+    }
+
+    reviewMode=true;
+    reviewIndex=history.length-1;
+
+    reviewPanel.style.display="block";
+    analysisPanel.style.display="block";
+
+    /*
+        重要：
+        先に最終盤面を描画し、ゲーム終了表示を確定する。
+        その後に総評・グラフを生成する。
+        これにより、総評側に問題が起きても
+        最後の着手や終了表示が消えない。
+    */
+    drawBoard();
+
+    const finalState=history[history.length-1];
+
+    const humanCount=
+        HUMAN===BLACK
+        ?finalState.black
+        :finalState.white;
+
+    const aiCount=
+        AI===BLACK
+        ?finalState.black
+        :finalState.white;
+
+    turnElement.textContent=
+        humanCount>aiCount
+        ?"ゲーム終了！ あなたの勝ちです！"
+        :aiCount>humanCount
+        ?"ゲーム終了！ AIの勝ちです。"
+        :"ゲーム終了！ 引き分けです。";
+
+
+}
+function reviewFirst(){reviewIndex=0;drawBoard()}function reviewPrevious(){if(reviewIndex>0){reviewIndex--;drawBoard()}}function reviewNext(){if(reviewIndex<history.length-1){reviewIndex++;drawBoard()}}function reviewLast(){reviewIndex=history.length-1;drawBoard()}
+function updateReviewPanel(){const item=history[reviewIndex],total=history.length-1;$("reviewCounter").textContent=`${reviewIndex}手目 / ${total}手`;if(reviewIndex===0){$("reviewInfo").innerHTML="<strong>開始局面</strong><br>黒：2　白：2";analysisContent.innerHTML="<p><strong>開始局面</strong></p><p>まだ着手はありません。</p>"}else if(item.player===HUMAN){$("reviewInfo").innerHTML=`<strong>${reviewIndex}手目：</strong> あなた（${colorName(HUMAN)}）が <strong>${item.name}</strong> に着手<br>黒：${item.black}　白：${item.white}`;showHumanAnalysis(item.analysis)}else{$("reviewInfo").innerHTML=`<strong>${reviewIndex}手目：</strong> AI（${colorName(AI)}）が <strong>${item.name}</strong> に着手<br>黒：${item.black}　白：${item.white}`;showAiAnalysis(item.analysis,true)}$("firstMoveButton").disabled=reviewIndex===0;$("previousMoveButton").disabled=reviewIndex===0;$("nextMoveButton").disabled=reviewIndex===history.length-1;$("lastMoveButton").disabled=reviewIndex===history.length-1}
+function otherPlayer(player){return player===BLACK?WHITE:BLACK}function copyBoard(board){return board.map(row=>[...row])}function coordinateName(row,col){return"ABCDEFGH"[col]+(row+1)}function colorName(player){return player===BLACK?"黒":"白"}function formatNumber(n){if(n===null)return"-";return n>0?"+"+n:String(n)}function difficultyName(d){return d==="easy"?"弱い":d==="normal"?"普通":"強い"}function modeName(m){return m==="normal"?"通常モード":m==="analysis"?"分析モード":"AI調整モード"}
+
+createCoordinates();updateSettingsScreenMode();updateTuningDisplay();
+</script>
+</body>
+</html>
