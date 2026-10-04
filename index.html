@@ -69,7 +69,7 @@ footer{margin-top:300px;color:#666;font-size:14px}
 <div class="tuning-item"><label>辺の価値 <span id="edgeValueText" class="value"></span></label><input id="edgeValue" type="range" min="-10" max="50" step="5" value="10"><div class="description">高くすると、AIは辺を好むようになります。</div></div>
 <div class="tuning-item"><label>石数の重み <span id="pieceWeightText" class="value"></span></label><input id="pieceWeight" type="range" min="0" max="20" step="1" value="2"><div class="description">高くすると、AIは現在の石数をより重視します。</div></div>
 <div class="tuning-item"><label>合法手数の重み <span id="mobilityWeightText" class="value"></span></label><input id="mobilityWeight" type="range" min="0" max="30" step="1" value="5"><div class="description">高くすると、AIは自分の選択肢を増やし、あなたの選択肢を減らすことをより重視します。</div></div>
-<div class="tuning-item"><label>強いAIの先読み深度 <span id="depthText" class="value"></span></label><input id="searchDepth" type="range" min="1" max="5" step="1" value="3"><div class="description">大きいほど先まで読みます。4～5では計算が重くなる場合があります。</div></div>
+<div class="tuning-item"><label>先読み深度 <span id="depthText" class="value"></span></label><input id="searchDepth" type="range" min="1" max="5" step="1" value="3"><div class="description">「強い」AIの思考と、あなたの推奨手分析で何手先まで読むかを設定します。大きいほど先まで読みますが、4～5では計算が重くなる場合があります。</div></div>
 <button type="button" onclick="resetTuning()">標準設定に戻す</button>
 <div id="currentFormula" class="formula"></div>
 </div>
@@ -92,9 +92,20 @@ footer{margin-top:300px;color:#666;font-size:14px}
 <div id="humanMoveContent">あなたが手を打つと、ここに候補手ごとの評価が表示されます。</div>
 </div>
 <div id="analysisPanel" class="panel"><h2>AI思考分析</h2><div id="analysisContent">AIが手を打つと、ここに分析結果が表示されます。</div><h3>用語解説</h3><div id="evaluationDirection" class="formula"></div><dl class="glossary"><dt>手</dt><dd>選択可能だった候補手です。D3ならD列・3行目を意味します。</dd><dt>位置評価</dt><dd>石が盤面上のどこにあるかを評価します。角は高評価、角の隣など危険な場所はマイナスになります。</dd><dt>石数評価</dt><dd>「AIの石数－あなたの石数」に設定した重みを掛けた値です。</dd><dt>合法手評価</dt><dd>AIが次に置ける場所と、あなたが次に置ける場所の数の差を評価します。</dd><dt>即時評価</dt><dd>その候補手を打った直後の盤面の評価です。</dd>
-<dt>先読み評価（AIが「強い」の場合のみ）</dt>
-<dd>その候補手を打ったあと、AIとあなたがそれぞれ有利な手を選ぶと仮定して数手先まで読み、将来の局面まで含めて評価した値です。＋ほどAIに有利、－ほどあなたに有利です。「強い」AIは、この先読み評価を使って着手を選びます。</dd>
-<dt>★採用</dt><dd>AIが実際に選択した手です。</dd><dt>★実際</dt><dd>感想戦で、あなたが実際に打った手を示します。</dd><dt>◎推奨</dt><dd>感想戦で、AIの評価関数上、あなたに最も有利だった候補手を示します。</dd></dl></div>
+<dt>角リスク</dt>
+<dd>
+その候補手を打ったあと、AIがA1・H1・A8・H8の角を取れる危険があるかを先読みして判定します。
+「次手で」はAIが直後に角を取れる場合、「数手先で」は、あなたが角を守ろうとしても先読みの範囲内でAIが角を確保できると判定された場合です。
+終盤を除き、角リスクのない候補が1つでもあるときは、角リスクのある手を◎推奨から外します。
+終盤では、角を渡しても最終的な石数で勝てる場合があるため、一律には除外しません。
+</dd>
+<dt>先読み評価（AI側は「強い」の場合のみ）</dt>
+<dd>
+その候補手を打ったあと、AIとあなたがそれぞれ自分に有利な手を選ぶと仮定して数手先まで読み、将来の局面まで含めて評価した値です。
+＋ほどAIに有利、－ほどあなたに有利です。
+AI側では「強い」の場合だけ表示・着手判断に使用しますが、あなたの「◎推奨」は分析モード・AI調整モードのどちらでも、この先読み評価を使って決めます。
+</dd>
+<dt>★採用</dt><dd>AIが実際に選択した手です。</dd><dt>★実際</dt><dd>感想戦で、あなたが実際に打った手を示します。</dd><dt>◎推奨</dt><dd>あなたの候補手を数手先まで読んだうえで、先読み評価が最もあなた側に有利だった手を示します。中盤までは、角リスクのない候補がある場合、角リスクのある手を推奨から除外します。</dd></dl></div>
 <div id="fixedSettingsPanel" class="panel"><h2>この対局のAI設定</h2><div id="fixedSettingsContent"></div></div>
 </div>
 </div>
@@ -121,7 +132,7 @@ function startGame(){const playerOrder=$("playerOrder").value,difficulty=$("diff
 function restartSameSettings(){startNewMatch()}
 function startNewMatch(){if(aiTimer!==null){clearTimeout(aiTimer);aiTimer=null}gameBoard=createInitialBoard();currentPlayer=BLACK;gameStarted=true;gameOver=false;reviewMode=false;reviewIndex=0;reviewPanel.style.display="none";humanMoveContent.innerHTML="あなたが手を打つと、ここに候補手ごとの評価が表示されます。";analysisContent.innerHTML="AIが手を打つと、ここに分析結果が表示されます。";initializeHistory();updateGameUiForConfig();drawBoard();if(currentPlayer===AI)scheduleAi()}
 function updateGameUiForConfig(){const hc=colorName(HUMAN),ac=colorName(AI),order=HUMAN===BLACK?"先手":"後手";$("gameSettingsSummary").textContent=`あなた：${order}（${hc}）　／　AI：${ac}　／　AIの強さ：${difficultyName(gameConfig.difficulty)}　／　表示：${modeName(gameConfig.displayMode)}`;$("evaluationDirection").innerHTML=`＋の値ほど <strong>AI（${ac}）に有利</strong><br>－の値ほど <strong>あなた（${hc}）に有利</strong>`;const showAnalysis=gameConfig.displayMode!=="normal";humanMovePanel.style.display=showAnalysis?"block":"none";analysisPanel.style.display=showAnalysis?"block":"none";fixedSettingsPanel.style.display=gameConfig.displayMode==="tuning"?"block":"none";if(gameConfig.displayMode==="tuning")showFixedSettings()}
-function showFixedSettings(){const s=gameConfig.settings;fixedSettingsContent.innerHTML=`<strong>対局開始時に固定されています。</strong><br><br>角：${s.corner}点　角の隣：${s.cornerNeighbor}点　辺：${s.edge}点<br>石数の重み：×${s.pieceWeight}　合法手数の重み：×${s.mobilityWeight}<br>強いAIの先読み深度：${s.depth}手`}
+function showFixedSettings(){const s=gameConfig.settings;fixedSettingsContent.innerHTML=`<strong>対局開始時に固定されています。</strong><br><br>角：${s.corner}点　角の隣：${s.cornerNeighbor}点　辺：${s.edge}点<br>石数の重み：×${s.pieceWeight}　合法手数の重み：×${s.mobilityWeight}<br>先読み深度：${s.depth}手（強いAI・あなたの推奨手分析）`}
 function returnToSettingsFromGame(){if(!gameOver&&!confirm("対局を終了して設定画面に戻りますか？"))return;returnToSettings()}
 function returnToSettingsAfterGame(){returnToSettings()}
 function returnToSettings(){if(aiTimer!==null){clearTimeout(aiTimer);aiTimer=null}gameStarted=false;gameOver=false;reviewMode=false;gameScreen.classList.remove("active");settingsScreen.classList.add("active")}
@@ -134,16 +145,564 @@ function getDisplayedBoard(){return reviewMode?history[reviewIndex].board:gameBo
 function drawBoard(){const board=getDisplayedBoard();boardElement.innerHTML="";for(let row=0;row<8;row++){for(let col=0;col<8;col++){const cell=document.createElement("div");cell.className="cell";if(!reviewMode&&!gameOver&&currentPlayer===HUMAN&&isValidMove(gameBoard,row,col,HUMAN))cell.classList.add("valid-move");if(reviewMode){const item=history[reviewIndex];if(item.row===row&&item.col===col)cell.classList.add("review-move")}cell.addEventListener("click",()=>humanMove(row,col));if(board[row][col]===BLACK){const p=document.createElement("div");p.className="piece black";cell.appendChild(p)}else if(board[row][col]===WHITE){const p=document.createElement("div");p.className="piece white";cell.appendChild(p)}boardElement.appendChild(cell)}}updateScore(board);if(reviewMode)updateReviewPanel();else if(!gameOver)turnElement.textContent=currentPlayer===HUMAN?`あなた（${colorName(HUMAN)}）の番です`:`AI（${colorName(AI)}）が考えています…`}
 
 function getPositionValue(row,col,s){if((row===0||row===7)&&(col===0||col===7))return s.corner;const near=[[0,1],[1,0],[1,1],[0,6],[1,6],[1,7],[6,0],[6,1],[7,1],[6,6],[6,7],[7,6]];if(near.some(([r,c])=>r===row&&c===col))return s.cornerNeighbor;if(row===0||row===7||col===0||col===7)return s.edge;return 1}
-function analyzeHumanMove(actualRow,actualCol){const settings={...gameConfig.settings},moves=getValidMoves(gameBoard,HUMAN),candidates=[];for(const move of moves){const b=copyBoard(gameBoard);applyMove(b,move.row,move.col,HUMAN);const d=evaluateBoardDetailed(b,settings);candidates.push({row:move.row,col:move.col,name:coordinateName(move.row,move.col),position:d.position,pieces:d.pieces,mobility:d.mobility,total:d.total})}const bestTotal=Math.min(...candidates.map(x=>x.total));return{type:"human",settings:{...settings},actualName:coordinateName(actualRow,actualCol),recommendedNames:candidates.filter(x=>x.total===bestTotal).map(x=>x.name),bestTotal,candidates}}
+
+
+function analyzeHumanMove(actualRow,actualCol){
+    const settings={...gameConfig.settings};
+    const moves=getValidMoves(gameBoard,HUMAN);
+    const candidates=[];
+
+    /*
+        分析モードでも標準の先読み深度（3手）を使用。
+        AI調整モードではユーザーが設定した深度を使用する。
+    */
+    const recommendationDepth=settings.depth;
+
+    /*
+        角リスクは、最低でも4手先まで確認する。
+        深度設定が4以上なら、その深度まで確認する。
+        ただし計算負荷を抑えるため最大5手。
+    */
+    const cornerSearchDepth=
+        Math.min(
+            5,
+            Math.max(
+                4,
+                recommendationDepth
+            )
+        );
+
+    for(const move of moves){
+        const boardAfterMove=copyBoard(gameBoard);
+
+        applyMove(
+            boardAfterMove,
+            move.row,
+            move.col,
+            HUMAN
+        );
+
+        const detail=
+            evaluateBoardDetailed(
+                boardAfterMove,
+                settings
+            );
+
+        /*
+            あなたがこの手を打った後はAIの番。
+            AIは評価値を高くし、あなたは低くしようとする、
+            という前提で数手先まで読む。
+        */
+        const lookaheadScore=
+            minimax(
+                boardAfterMove,
+                recommendationDepth,
+                AI,
+                -Infinity,
+                Infinity,
+                settings
+            );
+
+        const immediateCornerMoves=
+            getImmediateAiCornerMoves(
+                boardAfterMove
+            );
+
+        const forcedCornerMoves=
+            findForcedAiCorners(
+                boardAfterMove,
+                cornerSearchDepth
+            );
+
+        const delayedCornerMoves=
+            forcedCornerMoves.filter(
+                name=>
+                    !immediateCornerMoves.includes(name)
+            );
+
+        candidates.push({
+            row:move.row,
+            col:move.col,
+            name:coordinateName(move.row,move.col),
+            position:detail.position,
+            pieces:detail.pieces,
+            mobility:detail.mobility,
+            total:detail.total,
+            lookaheadScore,
+            immediateCornerMoves,
+            delayedCornerMoves,
+            forcedCornerMoves,
+            cornerRisk:forcedCornerMoves.length>0
+        });
+    }
+
+    const emptyBefore=
+        gameBoard
+            .flat()
+            .filter(x=>x===EMPTY)
+            .length;
+
+    const emptyAfter=
+        emptyBefore-1;
+
+    /*
+        残り12マスより多い間を「終盤前」とする。
+        終盤では、角を渡してでも最終的に勝つ手があり得るので、
+        角リスクによる一律除外を行わない。
+    */
+    const beforeEndgame=
+        emptyAfter>12;
+
+    const safeCandidates=
+        candidates.filter(
+            candidate=>
+                !candidate.cornerRisk
+        );
+
+    const cornerSafetyApplied=
+        beforeEndgame
+        &&
+        safeCandidates.length>0
+        &&
+        safeCandidates.length<candidates.length;
+
+    const recommendationPool=
+        cornerSafetyApplied
+        ?
+        safeCandidates
+        :
+        candidates;
+
+    /*
+        ＋ほどAI有利、－ほどあなた有利。
+        したがって、あなたの推奨手は
+        先読み評価が最も低い候補。
+    */
+    const bestLookaheadScore=
+        Math.min(
+            ...recommendationPool.map(
+                candidate=>
+                    candidate.lookaheadScore
+            )
+        );
+
+    const recommendedNames=
+        recommendationPool
+            .filter(
+                candidate=>
+                    candidate.lookaheadScore
+                    ===
+                    bestLookaheadScore
+            )
+            .map(
+                candidate=>
+                    candidate.name
+            );
+
+    return{
+        type:"human",
+        settings:{...settings},
+        actualName:coordinateName(
+            actualRow,
+            actualCol
+        ),
+        recommendedNames,
+        bestLookaheadScore,
+        candidates,
+        cornerSafetyApplied,
+        beforeEndgame,
+        recommendationDepth,
+        cornerSearchDepth
+    };
+}
+
 function humanMove(row,col){if(!gameStarted||reviewMode||gameOver||currentPlayer!==HUMAN||!isValidMove(gameBoard,row,col,HUMAN))return;const snapshot=analyzeHumanMove(row,col);applyMove(gameBoard,row,col,HUMAN);recordHistory(HUMAN,row,col,snapshot);if(gameConfig.displayMode!=="normal")showHumanAnalysis(snapshot,humanMoveContent);currentPlayer=AI;continueGame()}
 function aiMove(){aiTimer=null;if(!gameStarted||gameOver||currentPlayer!==AI)return;const difficulty=gameConfig.difficulty,analyses=analyzeAiMoves(difficulty);if(!analyses.length)return;let chosen;if(difficulty==="easy")chosen=analyses[Math.floor(Math.random()*analyses.length)];else if(difficulty==="normal")chosen=analyses.reduce((a,b)=>b.total>a.total?b:a);else chosen=analyses.reduce((a,b)=>b.minimaxScore>a.minimaxScore?b:a);const snapshot={type:"ai",difficulty,settings:{...gameConfig.settings},chosenName:chosen.name,candidates:analyses.map(x=>({...x}))};showAiAnalysis(snapshot,false);applyMove(gameBoard,chosen.row,chosen.col,AI);recordHistory(AI,chosen.row,chosen.col,snapshot);currentPlayer=HUMAN;continueGame()}
 function analyzeAiMoves(difficulty){const moves=getValidMoves(gameBoard,AI),results=[],settings={...gameConfig.settings};for(const move of moves){const b=copyBoard(gameBoard);applyMove(b,move.row,move.col,AI);const d=evaluateBoardDetailed(b,settings);let minimaxScore=null;if(difficulty==="hard")minimaxScore=minimax(b,settings.depth,HUMAN,-Infinity,Infinity,settings);results.push({row:move.row,col:move.col,name:coordinateName(move.row,move.col),position:d.position,pieces:d.pieces,mobility:d.mobility,total:d.total,minimaxScore})}return results}
 function evaluateBoardDetailed(board,s){let position=0;for(let r=0;r<8;r++)for(let c=0;c<8;c++){const v=getPositionValue(r,c,s);if(board[r][c]===AI)position+=v;if(board[r][c]===HUMAN)position-=v}const counts=countPieces(board),aiCount=AI===BLACK?counts.black:counts.white,humanCount=HUMAN===BLACK?counts.black:counts.white,pieces=(aiCount-humanCount)*s.pieceWeight,mobility=(getValidMoves(board,AI).length-getValidMoves(board,HUMAN).length)*s.mobilityWeight;return{position,pieces,mobility,total:position+pieces+mobility}}
 function evaluateBoard(board,s){return evaluateBoardDetailed(board,s).total}
+
+function isCorner(row,col){
+    return (row===0||row===7)&&(col===0||col===7);
+}
+
+function getImmediateAiCornerMoves(board){
+    return getValidMoves(board,AI)
+        .filter(move=>isCorner(move.row,move.col))
+        .map(move=>coordinateName(move.row,move.col));
+}
+
+/*
+    指定した角について、
+    「AIがその角を取ろうとし、あなたがそれを避けようとする」
+    と仮定したとき、depth手以内にAIがその角を強制的に取れるかを判定する。
+*/
+function canAiForceSpecificCorner(board,depth,player,cornerRow,cornerCol,memo){
+    if(board[cornerRow][cornerCol]===AI)return true;
+
+    /*
+        角をあなたがすでに取っている場合、
+        その角は二度とAIには取れない。
+    */
+    if(board[cornerRow][cornerCol]===HUMAN)return false;
+
+    if(depth<=0)return false;
+
+    const key=
+        board.flat().join("")
+        +"|"+depth
+        +"|"+player
+        +"|"+cornerRow
+        +"|"+cornerCol;
+
+    if(memo.has(key))return memo.get(key);
+
+    const moves=getValidMoves(board,player);
+    const opponent=otherPlayer(player);
+
+    if(moves.length===0){
+        const otherMoves=getValidMoves(board,opponent);
+
+        if(otherMoves.length===0){
+            memo.set(key,false);
+            return false;
+        }
+
+        const result=canAiForceSpecificCorner(
+            board,
+            depth-1,
+            opponent,
+            cornerRow,
+            cornerCol,
+            memo
+        );
+
+        memo.set(key,result);
+        return result;
+    }
+
+    let result;
+
+    if(player===AI){
+        /*
+            AIは、角を取れる展開が1つでもあればそれを選ぶ。
+        */
+        result=false;
+
+        for(const move of moves){
+            const next=copyBoard(board);
+            applyMove(next,move.row,move.col,AI);
+
+            if(
+                canAiForceSpecificCorner(
+                    next,
+                    depth-1,
+                    HUMAN,
+                    cornerRow,
+                    cornerCol,
+                    memo
+                )
+            ){
+                result=true;
+                break;
+            }
+        }
+    }else{
+        /*
+            あなたは角を守るために最善を尽くす。
+            それでも、どの手を選んでもAIが角を取れるなら
+            「強制的に角を取られる」と判定する。
+        */
+        result=true;
+
+        for(const move of moves){
+            const next=copyBoard(board);
+            applyMove(next,move.row,move.col,HUMAN);
+
+            if(
+                !canAiForceSpecificCorner(
+                    next,
+                    depth-1,
+                    AI,
+                    cornerRow,
+                    cornerCol,
+                    memo
+                )
+            ){
+                result=false;
+                break;
+            }
+        }
+    }
+
+    memo.set(key,result);
+    return result;
+}
+
+function findForcedAiCorners(board,depth){
+    const corners=[
+        [0,0],
+        [0,7],
+        [7,0],
+        [7,7]
+    ];
+
+    const names=[];
+
+    for(const [row,col] of corners){
+        /*
+            空いている角だけを「新たに取られる危険」として調べる。
+        */
+        if(board[row][col]!==EMPTY)continue;
+
+        const memo=new Map();
+
+        if(
+            canAiForceSpecificCorner(
+                board,
+                depth,
+                AI,
+                row,
+                col,
+                memo
+            )
+        ){
+            names.push(coordinateName(row,col));
+        }
+    }
+
+    return names;
+}
+
 function minimax(board,depth,player,alpha,beta,s){const moves=getValidMoves(board,player),opponent=otherPlayer(player);if(moves.length===0){const otherMoves=getValidMoves(board,opponent);if(otherMoves.length===0){const c=countPieces(board),aiCount=AI===BLACK?c.black:c.white,humanCount=HUMAN===BLACK?c.black:c.white;return(aiCount-humanCount)*10000}}if(depth<=0)return evaluateBoard(board,s);if(moves.length===0)return minimax(board,depth-1,opponent,alpha,beta,s);if(player===AI){let best=-Infinity;for(const move of moves){const b=copyBoard(board);applyMove(b,move.row,move.col,AI);const score=minimax(b,depth-1,HUMAN,alpha,beta,s);best=Math.max(best,score);alpha=Math.max(alpha,score);if(beta<=alpha)break}return best}else{let best=Infinity;for(const move of moves){const b=copyBoard(board);applyMove(b,move.row,move.col,HUMAN);const score=minimax(b,depth-1,AI,alpha,beta,s);best=Math.min(best,score);beta=Math.min(beta,score);if(beta<=alpha)break}return best}}
 
 function showAiAnalysis(snapshot,isReview){if(!isReview&&gameConfig.displayMode==="normal")return;let html=isReview?"<p><strong>この手を打った時のAI思考分析</strong></p>":"<p><strong>今回のAIの候補手</strong></p>";html+="<table>"+(snapshot.difficulty==="hard"?"<tr><th>手</th><th>位置評価</th><th>石数評価</th><th>合法手評価</th><th>即時評価</th><th>先読み評価</th></tr>":"<tr><th>手</th><th>位置評価</th><th>石数評価</th><th>合法手評価</th><th>即時評価</th></tr>");for(const item of snapshot.candidates){const selected=item.name===snapshot.chosenName;html+=`<tr ${selected?'class="chosen"':''}><td>${selected?'★採用 ':''}${item.name}</td><td>${formatNumber(item.position)}</td><td>${formatNumber(item.pieces)}</td><td>${formatNumber(item.mobility)}</td><td>${formatNumber(item.total)}</td>${snapshot.difficulty==="hard"?`<td>${formatNumber(item.minimaxScore)}</td>`:""}</tr>`}html+="</table><div class='note'>";html+=`<strong>AIの強さ：</strong> ${difficultyName(snapshot.difficulty)}<br>`;html+=snapshot.difficulty==="easy"?"弱いAIは候補手からランダムに選択しました。":snapshot.difficulty==="normal"?"普通AIは即時評価が最も高い手を選択しました。":"強いAIは数手先まで読んだ評価を使って手を選択しました。";html+=`<br><br><strong>採用手：</strong> ${snapshot.chosenName}`;if(isReview){const s=snapshot.settings;html+=`<br><br><strong>この手を考えた当時のAI設定</strong><br>角：${s.corner}点　角の隣：${s.cornerNeighbor}点　辺：${s.edge}点<br>石数の重み：×${s.pieceWeight}　合法手数の重み：×${s.mobilityWeight}`;if(snapshot.difficulty==="hard")html+=`　先読み深度：${s.depth}手`}html+="</div>";analysisContent.innerHTML=html}
-function showHumanAnalysis(snapshot,target=analysisContent){let html=`<p><strong>あなた（${colorName(HUMAN)}）の着手分析</strong></p><div class="formula">この表はAIと同じ評価関数で、あなたが置けた候補手を比較しています。<br>＋ほどAI（${colorName(AI)}）に有利、－ほどあなた（${colorName(HUMAN)}）に有利です。<br>あなたの場合は、<strong>即時評価が最も低い手</strong>を「◎推奨」と表示します。</div><table><tr><th>手</th><th>位置評価</th><th>石数評価</th><th>合法手評価</th><th>即時評価</th></tr>`;for(const item of snapshot.candidates){const actual=item.name===snapshot.actualName,recommended=snapshot.recommendedNames.includes(item.name);let cls="",mark="";if(actual&&recommended)cls="actual-recommended";else if(actual)cls="chosen";else if(recommended)cls="recommended";if(actual)mark+="★実際 ";if(recommended)mark+="◎推奨 ";html+=`<tr class="${cls}"><td>${mark}${item.name}</td><td>${formatNumber(item.position)}</td><td>${formatNumber(item.pieces)}</td><td>${formatNumber(item.mobility)}</td><td>${formatNumber(item.total)}</td></tr>`}html+="</table>";const actual=snapshot.candidates.find(x=>x.name===snapshot.actualName),actualIsBest=actual.total===snapshot.bestTotal;html+=`<div class="note"><strong>あなたの実際の手：</strong> ${snapshot.actualName}<br><strong>この評価関数で最も有利だった候補：</strong> ${snapshot.recommendedNames.join("、")}`;if(actualIsBest)html+="<br><br>あなたが選んだ手は、<strong>この評価関数では最も高く評価された候補でした。</strong>";else html+=`<br><br>あなたの手は ${formatNumber(actual.total)}、最も有利だった候補は ${formatNumber(snapshot.bestTotal)} でした。<br>数値が低いほど、あなた側に有利な評価です。`;const s=snapshot.settings;html+=`<br><br><strong>この手を評価したときの設定</strong><br>角：${s.corner}点　角の隣：${s.cornerNeighbor}点　辺：${s.edge}点<br>石数の重み：×${s.pieceWeight}　合法手数の重み：×${s.mobilityWeight}</div>`;target.innerHTML=html}
+
+
+function showHumanAnalysis(snapshot,target=analysisContent){
+    let html=`
+        <p>
+            <strong>
+                あなた（${colorName(HUMAN)}）の着手分析
+            </strong>
+        </p>
+
+        <div class="formula">
+            あなたの候補手を、打った直後だけでなく
+            <strong>${snapshot.recommendationDepth}手先まで読んで</strong>
+            比較しています。<br>
+
+            ＋ほどAI（${colorName(AI)}）に有利、
+            －ほどあなた（${colorName(HUMAN)}）に有利です。<br>
+
+            <strong>◎推奨は、先読み評価が最も低い候補</strong>
+            です。
+
+            ${
+                snapshot.cornerSafetyApplied
+                ?
+                `<br><strong>角安全ルール：</strong>
+                先読みの範囲でAIに角を取られる候補は、
+                角を守れる候補があるため推奨から除外しています。`
+                :
+                ""
+            }
+        </div>
+
+        <table>
+            <tr>
+                <th>手</th>
+                <th>位置評価</th>
+                <th>石数評価</th>
+                <th>合法手評価</th>
+                <th>即時評価</th>
+                <th>先読み評価</th>
+                <th>角リスク</th>
+            </tr>
+    `;
+
+    for(const item of snapshot.candidates){
+        const actual=
+            item.name
+            ===
+            snapshot.actualName;
+
+        const recommended=
+            snapshot
+                .recommendedNames
+                .includes(
+                    item.name
+                );
+
+        let cls="";
+        let mark="";
+
+        if(
+            actual
+            &&
+            recommended
+        ){
+            cls="actual-recommended";
+        }
+        else if(actual){
+            cls="chosen";
+        }
+        else if(recommended){
+            cls="recommended";
+        }
+
+        if(actual){
+            mark+="★実際 ";
+        }
+
+        if(recommended){
+            mark+="◎推奨 ";
+        }
+
+        let cornerText="なし";
+
+        if(
+            item.immediateCornerMoves
+            &&
+            item.immediateCornerMoves.length
+        ){
+            cornerText=
+                "⚠ 次手で "
+                +
+                item.immediateCornerMoves.join("・");
+        }
+        else if(
+            item.delayedCornerMoves
+            &&
+            item.delayedCornerMoves.length
+        ){
+            cornerText=
+                "⚠ 数手先で "
+                +
+                item.delayedCornerMoves.join("・");
+        }
+
+        html+=`
+            <tr class="${cls}">
+                <td>${mark}${item.name}</td>
+                <td>${formatNumber(item.position)}</td>
+                <td>${formatNumber(item.pieces)}</td>
+                <td>${formatNumber(item.mobility)}</td>
+                <td>${formatNumber(item.total)}</td>
+                <td>${formatNumber(item.lookaheadScore)}</td>
+                <td>${cornerText}</td>
+            </tr>
+        `;
+    }
+
+    html+="</table>";
+
+    const actual=
+        snapshot
+            .candidates
+            .find(
+                candidate=>
+                    candidate.name
+                    ===
+                    snapshot.actualName
+            );
+
+    const actualIsRecommended=
+        snapshot
+            .recommendedNames
+            .includes(
+                snapshot.actualName
+            );
+
+    html+=`
+        <div class="note">
+            <strong>あなたの実際の手：</strong>
+            ${snapshot.actualName}
+            <br>
+
+            <strong>この分析での推奨候補：</strong>
+            ${snapshot.recommendedNames.join("、")}
+    `;
+
+    if(actualIsRecommended){
+        html+=`
+            <br><br>
+            あなたが選んだ手は、
+            <strong>
+                数手先まで読んだこの分析でも推奨候補でした。
+            </strong>
+        `;
+    }
+    else if(
+        actual.cornerRisk
+        &&
+        snapshot.cornerSafetyApplied
+    ){
+        const immediate=
+            actual.immediateCornerMoves
+            &&
+            actual.immediateCornerMoves.length;
+
+        const corners=
+            immediate
+            ?
+            actual.immediateCornerMoves
+            :
+            actual.forcedCornerMoves;
+
+        html+=`
+            <br><br>
+            <strong>
+                ${snapshot.actualName}は、
+                ${
+                    immediate
+                    ?
+                    "次のAI手で"
+                    :
+                    "先読みの範囲で"
+                }
+                ${corners.join("・")}の角をAIに取られる危険があるため、
+                中盤では推奨候補から除外されています。
+            </strong>
+        `;
+    }
+    else{
+        html+=`
+            <br><br>
+            あなたの手の先読み評価は
+            ${formatNumber(actual.lookaheadScore)}、
+            推奨候補は
+            ${formatNumber(snapshot.bestLookaheadScore)}
+            でした。<br>
+
+            数値が低いほど、あなた側に有利な評価です。
+        `;
+    }
+
+    const settings=
+        snapshot.settings;
+
+    html+=`
+            <br><br>
+            <strong>この手を評価したときの設定</strong>
+            <br>
+            角：${settings.corner}点　
+            角の隣：${settings.cornerNeighbor}点　
+            辺：${settings.edge}点
+            <br>
+            石数の重み：×${settings.pieceWeight}　
+            合法手数の重み：×${settings.mobilityWeight}
+            <br>
+            あなたの推奨手の先読み深度：
+            ${snapshot.recommendationDepth}手
+            <br>
+            角リスクの確認：
+            最大${snapshot.cornerSearchDepth}手先
+        </div>
+    `;
+
+    target.innerHTML=html;
+}
 
 function getValidMoves(board,player){const moves=[];for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(isValidMove(board,r,c,player))moves.push({row:r,col:c});return moves}
 function isValidMove(board,row,col,player){return getFlips(board,row,col,player).length>0}
